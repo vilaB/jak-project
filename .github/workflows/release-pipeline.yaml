@@ -104,14 +104,27 @@ jobs:
 
       - name: Prepare ARM macOS Build Assets
         run: |
+          echo "=== Artifact structure before fix ==="
+          ls -Rl ./ci-artifacts/ || true
+          BIN_SRC="./ci-artifacts/opengoal-macos-static-arm"
+          # Artifact from upload-artifact v4 is flat or nested - normalize to expected layout
+          GK_PATH=$(find "$BIN_SRC" -name "gk" -type f | head -1)
+          GOALC_PATH=$(find "$BIN_SRC" -name "goalc" -type f | head -1)
+          EXTRACTOR_PATH=$(find "$BIN_SRC" -name "extractor" -type f | head -1)
+          LSP_PATH=$(find "$BIN_SRC" -name "lsp" -type f | head -1)
+          echo "Found GK:$GK_PATH GOALC:$GOALC_PATH EXTRACTOR:$EXTRACTOR_PATH LSP:$LSP_PATH"
+          mkdir -p "$BIN_SRC/game" "$BIN_SRC/goalc" "$BIN_SRC/decompiler" "$BIN_SRC/lsp"
+          [ -n "$GK_PATH" ] && cp -f "$GK_PATH" "$BIN_SRC/game/gk" || echo "gk not found"
+          [ -n "$GOALC_PATH" ] && cp -f "$GOALC_PATH" "$BIN_SRC/goalc/goalc" || echo "goalc not found"
+          [ -n "$EXTRACTOR_PATH" ] && cp -f "$EXTRACTOR_PATH" "$BIN_SRC/decompiler/extractor" || echo "extractor not found"
+          [ -n "$LSP_PATH" ] && cp -f "$LSP_PATH" "$BIN_SRC/lsp/lsp" || echo "lsp not found"
+          ls -Rl "$BIN_SRC" || true
           mkdir -p ./ci-artifacts/macos-arm
-          ./.github/scripts/releases/extract_build_unix.sh ./ci-artifacts/macos-arm ./ci-artifacts/opengoal-macos-static-arm ./
-          pushd ci-artifacts/macos-arm
+          ./.github/scripts/releases/extract_build_unix.sh ./ci-artifacts/macos-arm "$BIN_SRC" ./
           TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          tar czf ../final/opengoal-macos-arm-${TAG_VAL}.tar.gz .
-          popd
-          chmod +x ./ci-artifacts/opengoal-macos-static-arm/lsp/lsp
-          cp ./ci-artifacts/opengoal-macos-static-arm/lsp/lsp ./ci-artifacts/final/opengoal-lsp-macos-arm-${TAG_VAL}.bin
+          tar czf ./ci-artifacts/final/opengoal-macos-arm-${TAG_VAL}.tar.gz -C ./ci-artifacts/macos-arm .
+          chmod +x "$BIN_SRC/lsp/lsp"
+          cp "$BIN_SRC/lsp/lsp" ./ci-artifacts/final/opengoal-lsp-macos-arm-${TAG_VAL}.bin
 
       - name: Upload Assets
         env:
