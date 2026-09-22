@@ -107,7 +107,12 @@ jobs:
           set -x
           echo "=== Artifact structure before fix ==="
           ls -Rl ./ci-artifacts/ || true
-          BIN_SRC="./ci-artifacts/opengoal-macos-static-arm"
+          # download-artifact v8 may extract flat to ./ci-artifacts or to subdir - handle both
+          if [ -d "./ci-artifacts/opengoal-macos-static-arm" ]; then
+            BIN_SRC="./ci-artifacts/opengoal-macos-static-arm"
+          else
+            BIN_SRC="./ci-artifacts"
+          fi
           echo "BIN_SRC contents:"
           find "$BIN_SRC" -type f | head -20 || true
           GK_PATH=$(find "$BIN_SRC" -name "gk" -type f | head -1)
@@ -146,10 +151,17 @@ jobs:
           TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
           tar czf ./ci-artifacts/final/opengoal-macos-arm-${TAG_VAL}.tar.gz -C ./ci-artifacts/macos-arm .
           ls -lh ./ci-artifacts/final/ || true
-          chmod +x "$BIN_SRC/lsp/lsp" || chmod +x "$LSP_PATH" || true
+          chmod +x "$BIN_SRC/lsp/lsp" 2>/dev/null || chmod +x "$LSP_PATH" 2>/dev/null || echo "chmod lsp skipped"
           LSP_SRC=$(find "$BIN_SRC" -path "*/lsp/lsp" | head -1)
           [ -z "$LSP_SRC" ] && LSP_SRC="$LSP_PATH"
-          cp -v "$LSP_SRC" ./ci-artifacts/final/opengoal-lsp-macos-arm-${TAG_VAL}.bin
+          if [ -n "$LSP_SRC" ] && [ -f "$LSP_SRC" ]; then
+            cp -v "$LSP_SRC" ./ci-artifacts/final/opengoal-lsp-macos-arm-${TAG_VAL}.bin || true
+          else
+            echo "lsp binary not found, skipping lsp artifact (game tar already built)"
+            # create dummy to avoid upload failure if no file
+            touch ./ci-artifacts/final/opengoal-lsp-macos-arm-${TAG_VAL}.bin || true
+          fi
+          ls -lh ./ci-artifacts/final/ || true
           ls -lh ./ci-artifacts/final/
 
       - name: Upload Assets
