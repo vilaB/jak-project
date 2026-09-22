@@ -1,4 +1,4 @@
-name: 🏭 Draft Release
+name: 🏭 Draft Release - ARM only (vilaB fork)
 
 on:
   workflow_dispatch:
@@ -27,9 +27,8 @@ jobs:
     outputs:
       new_tag: ${{ steps.set_tag.outputs.new_tag }}
     steps:
-      # Docs - https://github.com/mathieudutour/github-tag-action
       - name: Bump Version and Push Tag
-        if: github.repository == 'open-goal/jak-project' && !inputs.release_version
+        if: "!inputs.release_version"
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
@@ -57,7 +56,6 @@ jobs:
           else
             TAG="${{ steps.tag_version.outputs.new_tag }}"
           fi
-
           gh release create "$TAG" \
             --generate-notes \
             --draft \
@@ -72,46 +70,10 @@ jobs:
             echo "new_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
           fi
 
-  # Windows
-  build_windows_clang:
-    needs:
-      - cut_release
-    name: "🖥️ Windows"
-    uses: ./.github/workflows/windows-build-clang.yaml
-    with:
-      cmakePreset: "Release-windows-clang-static"
-      cachePrefix: "static"
-      uploadArtifacts: true
-    secrets: inherit
-
-  # Linux
-  build_linux_clang:
-    needs:
-      - cut_release
-    name: "🐧 Linux"
-    uses: ./.github/workflows/linux-build-clang.yaml
-    with:
-      cmakePreset: "Release-linux-clang-static"
-      cachePrefix: "static"
-      uploadArtifacts: true
-    secrets: inherit
-
-  # macOS
-  build_macos_intel:
-    needs:
-      - cut_release
-    name: "🍎 MacOS"
-    uses: ./.github/workflows/macos-build.yaml
-    with:
-      cmakePreset: "Release-macos-x86_64-clang-static"
-      cachePrefix: "static"
-      uploadArtifacts: true
-    secrets: inherit
-
   build_macos_arm:
     needs:
       - cut_release
-    name: "🍎 MacOS"
+    name: "🍎 MacOS ARM"
     uses: ./.github/workflows/macos-build-arm.yaml
     with:
       cmakePreset: "Release-macos-arm64-clang-static"
@@ -119,16 +81,11 @@ jobs:
       uploadArtifacts: true
     secrets: inherit
 
-  # Upload the Artifacts
   upload_artifacts:
-    if: github.repository == 'open-goal/jak-project'
     needs:
       - cut_release
-      - build_windows_clang
-      - build_linux_clang
-      - build_macos_intel
       - build_macos_arm
-    name: "Upload Artifacts"
+    name: "Upload ARM Artifacts"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -139,42 +96,11 @@ jobs:
         run: mkdir -p ./ci-artifacts/final
 
       - uses: actions/download-artifact@v8
-        name: Download all Artifacts
         with:
           path: ./ci-artifacts/
 
-      - name: Display structure of downloaded files
+      - name: Display structure
         run: ls -Rl ./ci-artifacts/
-
-      - name: Prepare Linux Release Assets
-        run: |
-          mkdir -p ./ci-artifacts/linux
-          ./.github/scripts/releases/extract_build_unix.sh ./ci-artifacts/linux ./ci-artifacts/opengoal-linux-static ./
-          pushd ci-artifacts/linux
-          TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          tar czf ../final/opengoal-linux-${TAG_VAL}.tar.gz .
-          popd
-          chmod +x ./ci-artifacts/opengoal-linux-static/lsp/lsp
-          cp ./ci-artifacts/opengoal-linux-static/lsp/lsp ./ci-artifacts/final/opengoal-lsp-linux-${TAG_VAL}.bin
-
-      - name: Prepare Windows Build Assets
-        run: |
-          mkdir -p ./ci-artifacts/windows
-          ./.github/scripts/releases/extract_build_windows.sh ./ci-artifacts/windows ./ci-artifacts/opengoal-windows-static ./
-          TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          7z a -tzip ./ci-artifacts/final/opengoal-windows-${TAG_VAL}.zip ./ci-artifacts/windows/*
-          cp ./ci-artifacts/opengoal-windows-static/lsp.exe ./ci-artifacts/final/opengoal-lsp-windows-${TAG_VAL}.exe
-
-      - name: Prepare Intel macOS Build Assets
-        run: |
-          mkdir -p ./ci-artifacts/macos
-          ./.github/scripts/releases/extract_build_unix.sh ./ci-artifacts/macos ./ci-artifacts/opengoal-macos-static ./
-          pushd ci-artifacts/macos
-          TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          tar czf ../final/opengoal-macos-intel-${TAG_VAL}.tar.gz .
-          popd
-          chmod +x ./ci-artifacts/opengoal-macos-static/lsp/lsp
-          cp ./ci-artifacts/opengoal-macos-static/lsp/lsp ./ci-artifacts/final/opengoal-lsp-macos-intel-${TAG_VAL}.bin
 
       - name: Prepare ARM macOS Build Assets
         run: |
@@ -192,11 +118,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          gh release upload "${TAG_VAL}" ${{ github.WORKSPACE }}/ci-artifacts/final/* --repo open-goal/jak-project --clobber
+          gh release upload "${TAG_VAL}" ${{ github.WORKSPACE }}/ci-artifacts/final/* --repo "${{ github.repository }}" --clobber
 
       - name: Publish Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_VAL=${{ needs.cut_release.outputs.new_tag }}
-          gh release edit ${TAG_VAL} --draft=false --repo open-goal/jak-project
+          gh release edit ${TAG_VAL} --draft=false --repo "${{ github.repository }}"
